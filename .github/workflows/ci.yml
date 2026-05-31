@@ -20,7 +20,6 @@ jobs:
   # ================= FRONTEND =================
   frontend-ci:
     runs-on: ubuntu-latest
-
     defaults:
       run:
         working-directory: ./frontend
@@ -38,11 +37,9 @@ jobs:
       - run: npm run lint || true
       - run: npm run build
 
-
   # ================= BACKEND =================
   backend-ci:
     runs-on: ubuntu-latest
-
     defaults:
       run:
         working-directory: ./backend
@@ -59,11 +56,9 @@ jobs:
       - run: npm ci
       - run: npm test || true
 
-
   # ================= SECURITY =================
   security-scan:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
@@ -71,25 +66,18 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - run: npm ci || true
-      - run: npm audit --audit-level=high
+      - run: npm audit --audit-level=high || true
 
-
-  # ================= VERCEL PROD =================
+  # ================= VERCEL (PROD ONLY) =================
   deploy-vercel:
     runs-on: ubuntu-latest
     needs: [frontend-ci, backend-ci]
-
-    if: >
-      github.ref == 'refs/heads/main' &&
-      secrets.VERCEL_TOKEN != '' &&
-      secrets.VERCEL_ORG_ID != '' &&
-      secrets.VERCEL_PROJECT_ID != ''
+    if: github.ref == 'refs/heads/main'
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Deploy to Vercel (Production)
+      - name: Deploy to Vercel
         uses: amondnet/vercel-action@v22
         with:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
@@ -97,30 +85,25 @@ jobs:
           vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
           vercel-args: '--prod'
 
-
-  # ================= PREVIEW =================
+  # ================= PREVIEW DEPLOY (PR ONLY) =================
   preview-vercel:
     runs-on: ubuntu-latest
-
     if: github.event_name == 'pull_request'
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Deploy Preview to Vercel
+      - name: Deploy Preview
         uses: amondnet/vercel-action@v22
         with:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
           vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
 
-
-  # ================= DOCKER =================
+  # ================= DOCKER (OPTIONAL) =================
   docker:
     runs-on: ubuntu-latest
     needs: [frontend-ci, backend-ci]
-
-    if: github.ref == 'refs/heads/main'
 
     steps:
       - uses: actions/checkout@v4
@@ -128,5 +111,5 @@ jobs:
       - name: Build Docker Image
         run: docker build -t my-app:latest .
 
-      - name: Save Docker Image Artifact
+      - name: Save image
         run: docker save my-app:latest > image.tar
