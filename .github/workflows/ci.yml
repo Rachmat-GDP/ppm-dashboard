@@ -6,36 +6,105 @@ on:
   pull_request:
     branches: [ main ]
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   frontend-ci:
+    name: Frontend — lint / typecheck / build
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js (frontend)
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
 
+      - name: Use npm cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: npm-frontend-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: |
+            npm-frontend-${{ runner.os }}-
+
       - name: Install frontend dependencies
-        run: |
-          cd frontend
-          npm ci
+        working-directory: frontend
+        run: npm ci
 
-      - name: Run ESLint
-        run: |
-          cd frontend
-          npm run lint
+      - name: Run ESLint (frontend)
+        working-directory: frontend
+        run: npm run lint
 
-      - name: Type check
-        run: |
-          cd frontend
-          npx tsc --noEmit -p tsconfig.json
+      - name: Type check (frontend)
+        working-directory: frontend
+        run: npx tsc --noEmit -p tsconfig.json
 
       - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+  backend-ci:
+    name: Backend — install / tests / lint
+    runs-on: ubuntu-latest
+    needs: []
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js (backend)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Use npm cache (backend)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            backend/node_modules
+          key: npm-backend-${{ runner.os }}-${{ hashFiles('backend/package-lock.json') }}
+          restore-keys: |
+            npm-backend-${{ runner.os }}-
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Run ESLint (backend) if available
+        working-directory: backend
         run: |
-          cd frontend
-          npm run build
+          if [ -f package.json ] && jq -e '.scripts.lint' package.json > /dev/null 2>&1; then
+            npm run lint || true
+          else
+            echo "no lint script"
+          fi
+
+      - name: Run backend tests if available
+        working-directory: backend
+        run: |
+          if [ -f package.json ] && jq -e '.scripts.test' package.json > /dev/null 2>&1; then
+            npm test
+          else
+            echo "no test script"
+          fi
+
+  pr-check:
+    name: PR Checks — aggregate
+    runs-on: ubuntu-latest
+    needs: [frontend-ci, backend-ci]
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Report
+        run: echo "Frontend and Backend checks completed for PR ${{ github.event.pull_request.number }}"
